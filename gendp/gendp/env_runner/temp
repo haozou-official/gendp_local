@@ -1,0 +1,29 @@
+# 1. Get predicted action from policy
+with torch.no_grad():
+    if self.policy_keys is not None:
+        obs_dict = {k: obs_dict[k] for k in self.policy_keys}
+    action_dict = policy.predict_action(obs_dict)
+
+# 2. Convert torch tensors to numpy
+np_action_dict = dict_apply(action_dict, lambda x: x.detach().cpu().numpy())
+action = np_action_dict['action']  # shape: (1, pred_horizon, action_dim)
+
+# 3. Accumulate deltas over rollout
+if step_count == 0:
+    accumulated_action = action.copy()
+else:
+    accumulated_action += action  # accumulate deltas over steps
+
+# 4. Transform action (6D → Euler, etc.)
+n_envs, n_steps, action_dim = accumulated_action.shape
+env_action = self.undo_transform_action(accumulated_action.reshape(n_envs * n_steps, action_dim))
+env_action = env_action.reshape(n_envs, n_steps, env_action.shape[-1])
+
+env_action_ls.append(env_action[0])  
+obs, reward, done, info = env.step(env_action[0])
+
+# 6. Prepare for next loop
+for k, v in obs.items():
+    obs[k] = v[None]
+done = np.all(done)
+past_action = action

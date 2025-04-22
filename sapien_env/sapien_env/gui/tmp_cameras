@@ -1,0 +1,89 @@
+import numpy as np
+import cv2
+from scipy.spatial.transform import Rotation as R
+
+def load_calibrated_cameras(calib_dir: str) -> dict:
+    rvecs = np.load(f"{calib_dir}/rvecs.npy")  # (N, 3)
+    tvecs = np.load(f"{calib_dir}/tvecs.npy")  # (N, 3)
+    
+    camera_config = {}
+    for i, (rvec, tvec) in enumerate(zip(rvecs, tvecs)):
+        R_cam = cv2.Rodrigues(rvec)[0]  # (3, 3)
+        quat_xyzw = R.from_matrix(R_cam).as_quat()  # [x, y, z, w]
+        quat_wxyz = [quat_xyzw[3], quat_xyzw[0], quat_xyzw[1], quat_xyzw[2]]  # SAPIEN format
+
+        camera_config[f"cam_{i}"] = dict(
+            position=tvec.astype(np.float32),
+            rotation=np.array(quat_wxyz, dtype=np.float32),
+            name=f"cam_{i}_view",
+        )
+    
+    return camera_config
+
+# Replace the default
+YX_TABLE_TOP_CAMERAS = load_calibrated_cameras("/path/to/calibration/folder")
+
+for name, params in YX_TABLE_TOP_CAMERAS.items():
+    self.gui.create_camera_from_pos_rot(**params)
+
+
+import numpy as np
+import cv2
+from scipy.spatial.transform import Rotation as R
+
+def load_calibrated_cameras_xarm(calib_dir: str) -> dict:
+    rvecs = np.load(f"{calib_dir}/rvecs.npy")  # shape: (4, 3)
+    tvecs = np.load(f"{calib_dir}/tvecs.npy")  # shape: (4, 3)
+
+    # Define the desired camera names in the correct order
+    camera_names = ["right_top", "left_top", "right_bottom", "left_bottom"]
+
+    assert len(rvecs) == len(camera_names), \
+        f"Expected {len(camera_names)} camera poses, got {len(rvecs)}"
+
+    camera_config = {}
+    for i, (rvec, tvec) in enumerate(zip(rvecs, tvecs)):
+        R_cam = cv2.Rodrigues(rvec)[0]  # Convert rotation vector to matrix
+        quat_xyzw = R.from_matrix(R_cam).as_quat()  # [x, y, z, w]
+        quat_wxyz = [quat_xyzw[3], quat_xyzw[0], quat_xyzw[1], quat_xyzw[2]]  # [w, x, y, z] for SAPIEN
+
+        name = camera_names[i]
+        camera_config[name] = dict(
+            position=tvec.astype(np.float32),
+            rotation=np.array(quat_wxyz, dtype=np.float32),
+            name=f"{name}_view",
+        )
+
+        print(f"[gui_base] 📷 {name}: pos={tvec}, quat_wxyz={quat_wxyz}")
+
+    return camera_config
+
+# Cam to world version
+def load_calibrated_cameras_xarm(calib_dir: str) -> dict:
+    rvecs = np.load(f"{calib_dir}/rvecs.npy")  # shape: (N, 3)
+    tvecs = np.load(f"{calib_dir}/tvecs.npy")  # shape: (N, 3)
+
+    camera_names = ["right_top_view", "left_top_view", "right_bottom_view", "left_bottom_view"]
+    assert len(rvecs) == len(camera_names), f"Expected {len(camera_names)} camera poses, got {len(rvecs)}"
+
+    camera_config = {}
+
+    for i, (rvec, tvec) in enumerate(zip(rvecs, tvecs)):
+        R_cam = cv2.Rodrigues(rvec)[0]                # shape: (3, 3)
+        tvec = tvec.reshape(3, 1)                      # Ensure column vector
+
+        R_world = R_cam.T                              # Invert rotation
+        pos = -R_world @ tvec                          # Invert translation
+        quat_xyzw = SciRotation.from_matrix(R_world).as_quat()
+        quat_wxyz = [quat_xyzw[3], quat_xyzw[0], quat_xyzw[1], quat_xyzw[2]]  # Convert to SAPIEN format
+
+        name = camera_names[i]
+        camera_config[name] = dict(
+            position=pos.flatten().astype(np.float32),
+            rotation=np.array(quat_wxyz, dtype=np.float32),
+            name=name,
+        )
+
+        print(f"[gui_base] 📷 {name}: pos={pos.flatten()}, quat_wxyz={quat_wxyz}")
+
+    return camera_config

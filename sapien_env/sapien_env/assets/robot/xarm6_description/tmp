@@ -1,0 +1,5 @@
+sed -i 's|package://xarm_description/meshes/|/home/hz2999/gendp/sapien_env/sapien_env/assets/robot/xarm6_description/xarm_description/meshes/|g' /home/hz2999/gendp/sapien_env/sapien_env/assets/robot/xarm6_description/xarm6_with_gripper.urdf
+
+sed -i 's|package://xarm_gripper/meshes/|/home/hz2999/gendp/sapien_env/sapien_env/assets/robot/xarm6_description/xarm_gripper/meshes/|g' /home/hz2999/gendp/sapien_env/sapien_env/assets/robot/xarm6_description/xarm6_with_gripper.urdf
+
+sed -i 's|<mechanicalReduction>reduction</mechanicalReduction>|<mechanicalReduction>1.0</mechanicalReduction>|g' /home/hz2999/gendp/sapien_env/sapien_env/assets/robot/xarm6_description/xarm6_with_gripper.urdf

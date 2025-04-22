@@ -1,0 +1,31 @@
+# Load training actions once at beginning
+if step_count == 0:
+    if not hasattr(self, "hdf5_actions"):
+        import h5py
+        episode_path = "/home/hz2999/gendp/data/cube_picking_hdf5_Apr9/episode_0.hdf5"
+        with h5py.File(episode_path, "r") as f:
+            self.hdf5_actions = f["cartesian_action"][:]  # shape: (T, 7)
+        print(f"Loaded {self.hdf5_actions.shape[0]} cartesian actions from: {episode_path}")
+
+# Get the action directly from HDF5 at this step
+try:
+    raw_action = self.hdf5_actions[step_count]  # shape: (7,)
+except IndexError:
+    print("Reached end of HDF5 action sequence.")
+    break  # or return, depending on your loop
+
+# Optionally reshape to match expected format: (1, pred_horizon=1, action_dim)
+action = raw_action[None, None, :]  # shape: (1, 1, 7)
+
+# Skip policy prediction, use this action directly
+env_action = self.undo_transform_action(action.reshape(-1, action.shape[-1]))
+env_action = env_action.reshape(1, 1, env_action.shape[-1])  # (n_envs, n_steps, action_dim)
+
+env_action_ls.append(env_action[0])
+obs, reward, done, info = env.step(env_action[0])
+
+# Prepare for next step
+for k, v in obs.items():
+    obs[k] = v[None]
+done = np.all(done)
+past_action = action
