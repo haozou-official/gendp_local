@@ -69,11 +69,24 @@ def interpolate_feats(feats, points, h=None, w=None, padding_mode='zeros', align
     b, _, ch, cw = feats.shape
     if h is None and w is None:
         h, w = ch, cw
+
+    # print(f"[interpolate_feats] feats.shape: {feats.shape}")       # (B, C, H, W)
+    # print(f"[interpolate_feats] points.shape: {points.shape}")     # (B, N, 2)
+    # print(f"[interpolate_feats] h: {h}, w: {w}")
+
     x_norm = points[:, :, 0] / (w - 1) * 2 - 1
     y_norm = points[:, :, 1] / (h - 1) * 2 - 1
     points_norm = torch.stack([x_norm, y_norm], -1).unsqueeze(1)    # [srn,1,n,2]
+
+    # print(f"[interpolate_feats] points_norm.shape: {points_norm.shape}")
+    # print(f"[interpolate_feats] points_norm sample: {points_norm[0, 0, :5]}")
+
     feats_inter = F.grid_sample(feats, points_norm, mode=inter_mode, padding_mode=padding_mode, align_corners=align_corners).squeeze(2)      # srn,f,n
     feats_inter = feats_inter.permute(0,2,1)
+    
+    # print(f"[interpolate_feats] feats_inter.shape: {feats_inter.shape}")
+    # print(f"[interpolate_feats] feats_inter sample: {feats_inter[0, :5]}")
+
     return feats_inter
 
 def create_init_grid(boundaries, step_size):
@@ -341,6 +354,12 @@ class Fusion():
         
         # compute the distance to the closest point on the surface
         dist = inter_depth - pts_depth # [rfn,pn]
+        # print("[eval] inter_depth > 0.0:", (inter_depth > 0.0).sum().item())
+        # print("[eval] valid_mask:", valid_mask.sum().item())
+        # print("[eval] dist > -mu:", (dist > -self.mu).sum().item())
+
+        # print("[eval] inter_depth sample:", inter_depth[0, :10])
+        # print("[eval] pts_depth sample:", pts_depth[0, :10])
         dist_valid = (inter_depth > 0.0) & valid_mask & (dist > -self.mu) # [rfn,pn]
         
         # distance-based weight
@@ -1191,7 +1210,24 @@ class Fusion():
         pose = self.curr_obs_torch['pose'].detach().cpu().numpy() # [num_cam, 3, 4]
         pad = np.tile(np.array([[[0,0,0,1]]]), [pose.shape[0], 1, 1])
         pose = np.concatenate([pose, pad], axis=1)
+        # print(f"[fusion:extract_pcd_in_box] depth shape: ({depth.shape})")
+        # print(f"K: {K}")
+
+        # Main converter from multi-view RGBD images → 3D point cloud
+        # 1. Back-projects depth pixels into 3D camera space using intrinsics
+        # 2. Transforms them into world space using the pose
+        # 3. Applies boundary cropping using the boundaries (your 3D crop box)
+        # 4. Applies point filtering. 
+        #    If excluded_pts is passed in, points close to excluded_pts (e.g., robot) are filtered out. 
+        #    If exclude_colors is set, points with matching RGB values are removed
+        # 5. Downsamples with voxel grid if downsample=True
+        # print("[fusion:extract_pcd_in_box] depth min/max:", depth.min(), depth.max())
+        # print("[fusion:extract_pcd_in_box] boundaries:", boundaries)
+        # print("[fusion:extract_pcd_in_box] downsample_r:", downsample_r)
+        # print("[fusion:extract_pcd_in_box] excluded_pts.shape:", None if excluded_pts is None else excluded_pts.shape)
         pcd, _ = aggr_point_cloud_from_data(color, depth, K, pose, downsample=downsample, downsample_r=downsample_r, out_o3d=False, boundaries=boundaries, excluded_pts=excluded_pts, exclude_threshold=exclude_threshold, exclude_colors=exclude_colors)
+        # print("[fusion:extract_pcd_in_box] pcd shape:", pcd.shape)
+
         return pcd
     
     def get_query_obj_pcd(self):
@@ -1335,7 +1371,7 @@ class Fusion():
     
     def select_features_from_pcd(self, pcd, N, per_instance=False, init_idx=-1, vis=False, use_seg=True, use_dino=True):
         # pcd: (N, 3) numpy array
-        dist_threshold = 0.005
+        dist_threshold = 0.02
         
         pcd_tensor = torch.from_numpy(pcd).to(self.device, dtype=self.dtype)
         
@@ -1345,14 +1381,36 @@ class Fusion():
             else:
                 out = self.batch_eval(pcd_tensor, return_names=[])
         
+        # if 'dist' not in out or 'valid_mask' not in out:
+        #     print("[Warning] 'dist' or 'valid_mask' missing from fusion output. Skipping frame.")
+        #     return [], [], []
+        
+        #print("Fusion output keys:", out.keys())
+        # print("Fusion output dist:", out['dist'])
+        #print("Fusion output valid_mask:", out['valid_mask'])
+        # Create a boolean mask for points close to surface
         dist_mask = torch.abs(out['dist']) < dist_threshold
         
         ### handle the case of not using seg first
         if not use_seg:
+            #print(f"\nNot Using Seg...")
             src_feats_list = []
             img_list = [] # NOTE: empty for the sake of time
             src_pts_list = []
+
+            # print(f"[Debug] pcd_tensor.shape: {pcd_tensor.shape}")
+            # print(f"[Debug] dist_mask.sum(): {dist_mask.sum().item()} / {dist_mask.shape[0]}")
+            # print(f"[Debug] valid_mask.sum(): {out['valid_mask'].sum().item()} / {out['valid_mask'].shape[0]}")
+            # print(f"[Debug] (dist_mask & valid_mask).sum(): {(dist_mask & out['valid_mask']).sum().item()}")
+            # Filter points that are both valid and near the surface
             masked_pts = pcd_tensor[dist_mask & out['valid_mask']]
+            #print(f"[Debug] masked_pts.shape: {masked_pts.shape}")
+            #print(f"[Debug] masked_pts: {masked_pts}")
+
+            if masked_pts.shape[0] == 0:
+                print(f"dist_mask.sum = {dist_mask.sum().item()}, "
+                f"valid_mask.sum = {out['valid_mask'].sum().item()}")
+                return [], [], []
             
             # sample_pts, sample_idx, _ = fps_np(masked_pts.detach().cpu().numpy(), N, init_idx=init_idx)
             
@@ -1361,6 +1419,7 @@ class Fusion():
             # index = fps(masked_pts, batch, ratio=ratio, random_start=False)
             # sample_pts = masked_pts[index[:N]].detach().cpu().numpy()
             if N > 0:
+                #N = min(N, masked_pts.shape[0])
                 sample_pts, index = sample_farthest_points(masked_pts[None], K = N, random_start_point=False)
                 sample_pts = sample_pts[0].detach().cpu().numpy()
             else:
@@ -1372,6 +1431,7 @@ class Fusion():
             return src_feats_list, src_pts_list, img_list
         
         label = self.curr_obs_torch['consensus_mask_label']
+        print(f"[🔍] consensus_mask_label (instance list): {label}")
         
         last_label = label[0]
         
@@ -1381,10 +1441,20 @@ class Fusion():
         mask = out['mask'] # (N, num_instances) where 0 is background
         mask = mask / (mask.sum(dim=1, keepdim=True) + 1e-7) # (N, num_instances)
         for i in range(1, len(label)):
+            print(f"[📦] Processing instance {i}: label = '{label[i]}'")
             if label[i] == last_label and not per_instance:
                 continue
             instance_mask = mask[:, i] > 0.6
+
+            print(f"[Instance {i}] Label = {label[i]}")
+            print(f"    instance_mask.sum(): {instance_mask.sum().item()}")
+            print(f"    dist_mask.sum(): {dist_mask.sum().item()}")
+            print(f"    valid_mask.sum(): {out['valid_mask'].sum().item()}")
+            print(f"    Combined mask.sum(): {(instance_mask & dist_mask & out['valid_mask']).sum().item()}")
+            # Select points that belong to this instance and are close to the surface
             masked_pts = pcd_tensor[instance_mask & dist_mask & out['valid_mask']]
+            print(f"    masked_pts.shape: {masked_pts.shape}")
+
             if masked_pts.shape[0] == 0:
                 continue
             
@@ -1394,10 +1464,13 @@ class Fusion():
             # ratio = N / masked_pts.shape[0]
             # index = fps(masked_pts, batch, ratio=ratio, random_start=False)
             # sample_pts = masked_pts[index[:N]].detach().cpu().numpy()
+            
+            # Run FPS to pick N points
             sample_pts, index = sample_farthest_points(masked_pts[None], K = N, random_start_point=False)
             sample_pts = sample_pts[0].detach().cpu().numpy()
             
             # src_feats_list.append(out['dino_feats'][sample_idx])
+            # Extract DINO features if needed
             if use_dino:
                 src_feats_list.append(self.eval(torch.from_numpy(sample_pts).to(self.device, self.dtype))['dino_feats'])
             src_pts_list.append(sample_pts)

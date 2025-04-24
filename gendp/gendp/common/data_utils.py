@@ -300,17 +300,17 @@ def d3fields_proc(fusion, shape_meta, color_seq, depth_seq, extri_seq, intri_seq
             #obj_pcd = fusion.extract_pcd_in_box(boundaries=boundaries, downsample=True, downsample_r=0.002, excluded_pts=robot_pcd, exclude_threshold=exclude_threshold, exclude_colors=exclude_colors)
             src_feat_list, src_pts_list, _ = fusion.select_features_from_pcd(obj_pcd, N_total - ee_pcd.shape[0], per_instance=True, use_seg=use_seg, use_dino=(use_dino or distill_dino))
         
-        if len(src_pts_list) == 0:
-            print("[Warning] No valid src_pts_list — skipping this frame")
-            aggr_src_pts = np.zeros((N_total, 3), dtype=np.float32)
-            aggr_feats = np.zeros((N_total, 1024), dtype=np.float32)
-        else:
-            aggr_src_pts = np.concatenate(src_pts_list, axis=0) # (N, 3)
-            aggr_feats = torch.concat(src_feat_list, axis=0).detach().cpu().numpy() if (use_dino or distill_dino) else None # (N, 1024)
+        # if len(src_pts_list) == 0:
+        #     print("[Warning] No valid src_pts_list — skipping this frame")
+        #     aggr_src_pts = np.zeros((N_total, 3), dtype=np.float32)
+        #     aggr_feats = np.zeros((N_total, 1024), dtype=np.float32)
+        # else:
+        #     aggr_src_pts = np.concatenate(src_pts_list, axis=0) # (N, 3)
+        #     aggr_feats = torch.concat(src_feat_list, axis=0).detach().cpu().numpy() if (use_dino or distill_dino) else None # (N, 1024)
             
         
-        # aggr_src_pts = np.concatenate(src_pts_list, axis=0) # (N, 3)
-        # aggr_feats = torch.concat(src_feat_list, axis=0).detach().cpu().numpy() if (use_dino or distill_dino) else None # (N, 1024)
+        aggr_src_pts = np.concatenate(src_pts_list, axis=0) # (N, 3)
+        aggr_feats = torch.concat(src_feat_list, axis=0).detach().cpu().numpy() if (use_dino or distill_dino) else None # (N, 1024)
         
         # only to adjust point number when using segmentation
         if use_seg:
@@ -330,13 +330,13 @@ def d3fields_proc(fusion, shape_meta, color_seq, depth_seq, extri_seq, intri_seq
                                                        obj_name=distill_obj,).detach().cpu().numpy()
 
         # Apr 16
-        if aggr_src_pts.shape[0] > N_total:
-            aggr_src_pts = aggr_src_pts[:N_total]
-            aggr_feats = aggr_feats[:N_total] if aggr_feats is not None else None
-        elif aggr_src_pts.shape[0] < N_total:
-            aggr_src_pts = np.pad(aggr_src_pts, ((0, N_total - aggr_src_pts.shape[0]), (0, 0)), mode='constant')
-            if aggr_feats is not None:
-                aggr_feats = np.pad(aggr_feats, ((0, N_total - aggr_feats.shape[0]), (0, 0)), mode='constant')
+        # if aggr_src_pts.shape[0] > N_total:
+        #     aggr_src_pts = aggr_src_pts[:N_total]
+        #     aggr_feats = aggr_feats[:N_total] if aggr_feats is not None else None
+        # elif aggr_src_pts.shape[0] < N_total:
+        #     aggr_src_pts = np.pad(aggr_src_pts, ((0, N_total - aggr_src_pts.shape[0]), (0, 0)), mode='constant')
+        #     if aggr_feats is not None:
+        #         aggr_feats = np.pad(aggr_feats, ((0, N_total - aggr_feats.shape[0]), (0, 0)), mode='constant')
 
         try:
             # print(f"[d3fields_proc] aggr_src_pts.shape[0]: {aggr_src_pts.shape[0]}")

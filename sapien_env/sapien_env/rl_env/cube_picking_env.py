@@ -401,6 +401,7 @@ def main_env():
     )
     env.seed(42)
     env.reset()
+    print("[DEBUG] qpos:", env.robot.get_qpos())
 
     # # Draw the calibration frame after environment reset
     # base_pose = sapien.Pose(p=[-0.095, 0.085, -0.01], q=[1, 0, 0, 0])
@@ -410,12 +411,25 @@ def main_env():
     add_default_scene_light(env.scene, env.renderer)
     gui = GUIBase(env.scene, env.renderer, headless=True)
 
-    # Add predefined cameras (if you still want them)
-    for name, params in YX_TABLE_TOP_CAMERAS.items():
-        if 'rotation' in params:
-            gui.create_camera_from_pos_rot(position=params['position'], rotation=params['rotation'], name=name)
-        else:
-            gui.create_camera(position=params['position'], look_at_dir=params['look_at_dir'], right_dir=params['right_dir'], name=name)
+    # Camera is above and looking at gripper
+    eef_pose = env.robot.get_links()[-1].get_pose()
+    print("📍 EE World Position:", eef_pose.p)
+
+    cam_pos = eef_pose.p + np.array([0.2, 0.2, 0.2])  # adjust offset as needed
+    look_at = eef_pose.p
+    look_dir = look_at - cam_pos
+    look_dir = look_dir / np.linalg.norm(look_dir)
+
+    right_dir = np.array([-1, 0, 0])  # adjust to control camera roll
+
+    gui.create_camera(position=cam_pos, look_at_dir=look_dir, right_dir=right_dir, name="gripper_view")
+
+    # # Add predefined cameras (if you still want them)
+    # for name, params in YX_TABLE_TOP_CAMERAS.items():
+    #     if 'rotation' in params:
+    #         gui.create_camera_from_pos_rot(position=params['position'], rotation=params['rotation'], name=name)
+    #     else:
+    #         gui.create_camera(position=params['position'], look_at_dir=params['look_at_dir'], right_dir=params['right_dir'], name=name)
 
     # # DEFAULT_TABLE_TOP_CAMERAS
     # for name, params in DEFAULT_TABLE_TOP_CAMERAS.items():
@@ -443,10 +457,14 @@ def main_env():
 
     writer = imageio.get_writer(video_path, fps=20)
 
-    for i in range(1):
+    #for i in range(1):
+    for i in range(500):
         action = np.zeros(env.arm_dof + 1)
-        action[2] = 0.01  # small vertical motion
+        action[:env.arm_dof] = np.linspace(0, 0.5, env.arm_dof)  # small ramp
         obs, reward, done, _ = env.step(action)
+        # action = np.zeros(env.arm_dof + 1)
+        # action[2] = 0.01  # small vertical motion
+        # obs, reward, done, _ = env.step(action)
 
         # List of RGB frames from all mounted cameras
         rgbs = gui.render()

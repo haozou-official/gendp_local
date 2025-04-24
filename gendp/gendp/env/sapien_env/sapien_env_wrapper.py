@@ -198,8 +198,8 @@ class SapienEnvWrapper():
                 
                 aggr_src_pts = aggr_src_pts_ls[0]
                 aggr_feats = aggr_feats_ls[0]
-                # print(f"🧩 aggr_src_pts.shape: {aggr_src_pts.shape}")
-                # print(f"🧩 aggr_feats.shape: {'None' if aggr_feats is None else aggr_feats.shape}")
+                print(f"🧩 aggr_src_pts.shape: {aggr_src_pts.shape}")
+                print(f"🧩 aggr_feats.shape: {'None' if aggr_feats is None else aggr_feats.shape}")
                 if use_dino or distill_dino:
                     if aggr_feats is not None and aggr_feats.size > 0:
                         aggr_pts_feats = np.concatenate([aggr_src_pts, aggr_feats], axis=-1)
