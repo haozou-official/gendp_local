@@ -25,6 +25,9 @@ def transform_action_from_world_to_robot(action : np.ndarray, pose : sapien.Pose
     # :return: (7,) np.ndarray in robot frame. action[:3] is xyz, action[3:6] is euler angle, action[6] is gripper
     # transform action from world to robot frame
     action_mat = np.zeros((4,4))
+    # print(f"[transform_action_from_world_to_robot] action.shape {action.shape}")
+    # print(f"[transform_action_from_world_to_robot] action {action}")
+    # print(f"[transform_action_from_world_to_robot] action[3] {action[3]}")
     action_mat[:3,:3] = transforms3d.euler.euler2mat(action[3], action[4], action[5])
     action_mat[:3,3] = action[:3]
     action_mat[3,3] = 1
@@ -63,7 +66,7 @@ class SapienEnvWrapper():
         self.fusion = fusion
         self.pca_model = pca_model
         self.expected_labels = expected_labels
-        print(f"[wrapper] expected_labels: {expected_labels}")
+        # print(f"[wrapper] expected_labels: {expected_labels}")
         self.is_joint = ('key' in self.shape_meta['action'] and self.shape_meta['action']['key'] == 'joint_action')
         
         # setup spaces
@@ -138,8 +141,8 @@ class SapienEnvWrapper():
         # Overwrite render_obs_keys to exactly match the actual camera names
         self.render_obs_keys = [cam.name for cam in self.gui.cams]
 
-        print(f"🧩 Cameras created: {[cam.name for cam in self.gui.cams]}")
-        print(f"📸 Render keys set to: {self.render_obs_keys}")
+        # print(f"🧩 Cameras created: {[cam.name for cam in self.gui.cams]}")
+        # print(f"📸 Render keys set to: {self.render_obs_keys}")
                         
         # setup sapien control
         # self.teleop = TeleopRobot(env.robot_name)
@@ -198,8 +201,8 @@ class SapienEnvWrapper():
                 
                 aggr_src_pts = aggr_src_pts_ls[0]
                 aggr_feats = aggr_feats_ls[0]
-                print(f"🧩 aggr_src_pts.shape: {aggr_src_pts.shape}")
-                print(f"🧩 aggr_feats.shape: {'None' if aggr_feats is None else aggr_feats.shape}")
+                # print(f"🧩 aggr_src_pts.shape: {aggr_src_pts.shape}")
+                # print(f"🧩 aggr_feats.shape: {'None' if aggr_feats is None else aggr_feats.shape}")
                 if use_dino or distill_dino:
                     if aggr_feats is not None and aggr_feats.size > 0:
                         aggr_pts_feats = np.concatenate([aggr_src_pts, aggr_feats], axis=-1)
@@ -246,6 +249,8 @@ class SapienEnvWrapper():
         # print(f"🤖 EE current pos: {ee_pos}")
         # print(f"📏 Pose diff (policy target vs. EE): {pose_diff}")
 
+        # Apr 25 --> replay
+        self.is_joint = True
         if not self.is_joint:
             action_in_robot = transform_action_from_world_to_robot(action, self.env.robot.get_pose())
             
@@ -254,6 +259,7 @@ class SapienEnvWrapper():
             joint_action[:arm_dof] = self.teleop.compute_ik_sapien(self.env.robot.get_qpos()[:],action_in_robot)[:arm_dof]
             joint_action[arm_dof:] = action_in_robot[-1]
         else:
+            # print("[Wrapper] ✅ Using raw joint-space action directly")
             joint_action = action
     
         _, reward, done, info = self.env.step(joint_action)

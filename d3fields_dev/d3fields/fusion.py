@@ -1337,6 +1337,7 @@ class Fusion():
         # pcd: (N, 3) numpy array
         dist_threshold = 0.005
         
+        # print(f"[fusion] pcd.shape {pcd.shape}")
         pcd_tensor = torch.from_numpy(pcd).to(self.device, dtype=self.dtype)
         
         with torch.no_grad():

@@ -73,7 +73,7 @@ def generate_arm_robot_hand_info() -> Dict[str, ArmRobotInfo]:
     #xarm7_with_gripper = ArmRobotInfo(path=str(xarm_path / "xarm7_with_gripper.urdf"), hand_dof=0, arm_dof=7, palm_name="link7", arm_init_qpos=[0.0, -0.942, 1.257, -1.571, 0.942, 1.571, 0.0])
     #xarm7_with_gripper = ArmRobotInfo(path=str(xarm_path / "xarm7_with_gripper.urdf"), hand_dof=0, arm_dof=7, palm_name="link7", arm_init_qpos=[0.0, -0.942, 1.257, -1.571, 0.942 + np.pi, 1.571, np.pi])
     #xarm7_with_gripper = ArmRobotInfo(path=str(xarm_path / "xarm7_with_gripper.urdf"), hand_dof=0, arm_dof=7, palm_name="link7", arm_init_qpos=[0.0, -1.1, 1.4, -1.571, 3.6, -1.35, np.pi])  # Good
-    xarm7_with_gripper = ArmRobotInfo(path=str(xarm_path / "xarm7_with_gripper.urdf"), hand_dof=0, arm_dof=7, palm_name="link_eef", arm_init_qpos=[0.0, -1.0, 1.57, -1.571, 3.6, -1.35, np.pi])
+    xarm7_with_gripper = ArmRobotInfo(path=str(xarm_path / "xarm7_with_gripper.urdf"), hand_dof=0, arm_dof=7, palm_name="link7", arm_init_qpos=[0.0, -1.0, 1.57, -1.571, 3.6, -1.35, np.pi])
     info_dict = dict(
         xarm6=xarm6,
         xarm6_with_gripper=xarm6_with_gripper,

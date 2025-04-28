@@ -478,6 +478,15 @@ def aggr_point_cloud_from_data(
     pcds = np.concatenate(pcds_ls, axis=0)
     pcd_colors = np.concatenate(pcd_colors, axis=0)
 
+    # print(f"[debug] raw pcds.shape: {pcds.shape}, mean: {np.mean(pcds, axis=0)}, std: {np.std(pcds, axis=0)}")
+    # print(f"[debug] boundaries: {boundaries}")
+
+    boundaries = {
+        'x_lower': -0.2, 'x_upper': 0.5,
+        'y_lower': -0.2, 'y_upper': 0.5,
+        'z_lower': -0.4, 'z_upper': 0.2,
+    }
+
     # post process 1: remove points outside of boundaries
     if boundaries is not None:
         x_lower = boundaries["x_lower"]

@@ -115,14 +115,14 @@ YX_TABLE_TOP_CAMERAS = {
     #               name="front_view", ),
     
     # original camera views
-    # "left_bottom": dict(position=np.array([0.3, 0.2, 0.55]), look_at_dir=np.array([-0.5, -0.2, -0.6]), right_dir=np.array([-1, 1, 0]),
-    #                     name="left_bottom_view", ),
-    # "right_bottom": dict(position=np.array([-0.3, 0.2, 0.55]), look_at_dir=np.array([0.5, -0.2, -0.6]), right_dir=np.array([-1, -1, 0]),
-    #                      name="right_bottom_view", ),
-    # "left_top": dict(position=np.array([0.4, -0.1, 0.5]), look_at_dir=np.array([-0.4, 0.2, -0.4]), right_dir=np.array([1, 1, 0]),
-    #                  name="left_top_view", ),
-    # "right_top": dict(position=np.array([-0.4, -0.1, 0.5]), look_at_dir=np.array([0.4, 0.2, -0.4]), right_dir=np.array([1, -1, 0]),
-    #                   name="right_top_view", ),
+    "left_bottom": dict(position=np.array([0.3, 0.2, 0.55]), look_at_dir=np.array([-0.5, -0.2, -0.6]), right_dir=np.array([-1, 1, 0]),
+                        name="left_bottom_view", ),
+    "right_bottom": dict(position=np.array([-0.3, 0.2, 0.55]), look_at_dir=np.array([0.5, -0.2, -0.6]), right_dir=np.array([-1, -1, 0]),
+                         name="right_bottom_view", ),
+    "left_top": dict(position=np.array([0.4, -0.1, 0.5]), look_at_dir=np.array([-0.4, 0.2, -0.4]), right_dir=np.array([1, 1, 0]),
+                     name="left_top_view", ),
+    "right_top": dict(position=np.array([-0.4, -0.1, 0.5]), look_at_dir=np.array([0.4, 0.2, -0.4]), right_dir=np.array([1, -1, 0]),
+                      name="right_top_view", ),
     
     # more focused camera views
     # "left_bottom": dict(position=np.array([0.4, 0.04, 0.22]) * 1.1, rotation=np.array([ 0.15172046,  0.08636889,  0.01330951, -0.9845528 ]),
@@ -172,15 +172,15 @@ YX_TABLE_TOP_CAMERAS = {
     # "right": dict(position=np.array([-0.6, 0, 0.6]), look_at_dir=np.array([0.6, 0, -0.6]), right_dir=np.array([0, -1, 0]),
     #               name="right_view", ),
 
-    # cube picking DEFAULT
-    "right_top": dict(position=np.array([-0.300793, -0.03741587, 0.2789142]) * 1.1, rotation=np.array([ 0.96431008, -0.03549781,  0.17547506,  0.19507563]),
-                      name="right_top_view", ),
-    "left_top": dict(position=np.array([0.32175508, -0.09930836, 0.20163289]) * 1.1, rotation=np.array([ 0.26004855, -0.19390239,  0.05339162,  0.94441833]),
-                     name="left_top_view", ),
-    "right_bottom": dict(position=np.array([-0.31482142,  0.2923913, 0.26412952]) * 1.1, rotation=np.array([ 0.94703722,  0.04895124,  0.26465097, -0.17516899]),
-                         name="right_bottom_view", ),
-    "left_bottom": dict(position=np.array([0.3791156, 0.27693018, 0.270775]) * 1.1, rotation=np.array([ 0.13047577,  0.20659657,  0.0278099,  -0.96928869]),
-                        name="left_bottom_view", ),
+    # # cube picking DEFAULT
+    # "right_top": dict(position=np.array([-0.300793, -0.03741587, 0.2789142]) * 1.1, rotation=np.array([ 0.96431008, -0.03549781,  0.17547506,  0.19507563]),
+    #                   name="right_top_view", ),
+    # "left_top": dict(position=np.array([0.32175508, -0.09930836, 0.20163289]) * 1.1, rotation=np.array([ 0.26004855, -0.19390239,  0.05339162,  0.94441833]),
+    #                  name="left_top_view", ),
+    # "right_bottom": dict(position=np.array([-0.31482142,  0.2923913, 0.26412952]) * 1.1, rotation=np.array([ 0.94703722,  0.04895124,  0.26465097, -0.17516899]),
+    #                      name="right_bottom_view", ),
+    # "left_bottom": dict(position=np.array([0.3791156, 0.27693018, 0.270775]) * 1.1, rotation=np.array([ 0.13047577,  0.20659657,  0.0278099,  -0.96928869]),
+    #                     name="left_bottom_view", ),
 
     # # cube picking cam2world
     # "right_top": dict(position=np.array([-0.14476924, 0.68636805, -0.4841199]) * 1.1, rotation=np.array([0.53886604, 0.15596615, 0.3162868, 0.7650233]),
@@ -191,6 +191,15 @@ YX_TABLE_TOP_CAMERAS = {
     #                      name="right_bottom_view", ),
     # "left_bottom": dict(position=np.array([-0.1354076, -0.16205463, -0.4522945]) * 1.1, rotation=np.array([0.09217976, 0.30720887, 0.8802167, 0.34977728]),
     #                     name="left_bottom_view", ),
+
+#    "right_top": dict(position=np.array([-0.3224945664405823, -0.5697676539421082, 0.30695798993110657]) * 1.1, rotation=np.array([0.6607614159584045, 0.6412301063537598, -0.2717098295688629, -0.2799859046936035]),
+#                      name="right_top_view", ),
+#    "left_top": dict(position=np.array([-0.37303444743156433, 0.7821892499923706, 0.6345914006233215]) * 1.1, rotation=np.array([0.2633707821369171, 0.2045714408159256, -0.578315258026123, -0.7445386648178101]),
+#                     name="left_top_view", ),
+#    "right_bottom": dict(position=np.array([0.33925142884254456, -0.5106927156448364, 0.5071855783462524]) * 1.1, rotation=np.array([0.7008888125419617, 0.630905270576477, 0.22260935604572296, 0.24730241298675537]),
+#                         name="right_bottom_view", ),
+#    "left_bottom": dict(position=np.array([0.17006094753742218, 0.2912615239620209, 0.4446379542350769]) * 1.1, rotation=np.array([-0.40276190638542175, -0.2970028221607208, -0.5138377547264099, -0.6968091130256653]),
+#                        name="left_bottom_view", ),
 }
 
 def depth_to_vis_depth(depth):

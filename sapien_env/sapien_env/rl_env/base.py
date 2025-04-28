@@ -181,26 +181,193 @@ class BaseRLEnv(BaseSimulationEnv, gym.Env):
         self.current_step += 1
 
     def arm_sim_step(self, action: np.ndarray):
-        current_qpos = self.robot.get_qpos()
-        ee_link_last_pose = self.ee_link.get_pose()
-        action = np.clip(action, -1, 1)
-        target_root_velocity = recover_action(action[:6], self.velocity_limit[:6])
-        palm_jacobian = self.kinematic_model.compute_end_link_spatial_jacobian(current_qpos[:self.arm_dof])
-        arm_qvel = compute_inverse_kinematics(target_root_velocity, palm_jacobian)[:self.arm_dof]
-        arm_qvel = np.clip(arm_qvel, -np.pi / 1, np.pi / 1)
-        arm_qpos = arm_qvel * self.control_time_step + self.robot.get_qpos()[:self.arm_dof]
-        #hand_qpos = recover_action(action[6:], self.robot.get_qlimits()[self.arm_dof:])
-        hand_qpos = recover_action(action[7:], self.robot.get_qlimits()[self.arm_dof:])  # Control gripper joint only
-        target_qpos = np.concatenate([arm_qpos, hand_qpos])
-        target_qvel = np.zeros_like(target_qpos)
-        target_qvel[:self.arm_dof] = arm_qvel
-        # target_qvel[self.arm_dof:] = [1,-1]
-        self.robot.set_drive_target(target_qpos)
+        """
+        Executes one simulation step using absolute EE pose + gripper opening.
+        action: [x, y, z, roll, pitch, yaw, gripper]
+        """
+        # Parse action
+        target_pos = action[:3]
+        target_rpy = action[3:6]
+        gripper_opening = np.clip(action[6], 0.0, 0.08)
 
-        for i in range(self.frame_skip):
-            self.robot.set_qf(self.robot.compute_passive_force(external=False, coriolis_and_centrifugal=True))
+        # print(f"[DEBUG] Input arm_sim_step: {action}")
+        # print(f"[DEBUG] Input shape arm_sim_step: {action.shape}")
+
+        # Convert RPY to quaternion
+        target_quat = transforms3d.euler.euler2quat(*target_rpy)
+        target_pose = sapien.Pose(p=target_pos, q=target_quat)
+
+        # Current state
+        current_qpos = self.robot.get_qpos()
+        current_arm_qpos = current_qpos[:self.arm_dof]
+        current_pose = self.ee_link.get_pose()  # sapien.Pose
+
+        # Create target pose
+        target_pose = sapien.Pose(p=target_pos, q=target_quat)
+
+        # Compute 6D delta pose (in world frame)
+        delta_pos = target_pose.p - current_pose.p  # (3,)
+        current_mat = current_pose.to_transformation_matrix()[:3, :3]
+        target_mat = target_pose.to_transformation_matrix()[:3, :3]
+        delta_rot_mat = target_mat @ current_mat.T
+        delta_axis_angle = transforms3d.axangles.mat2axangle(delta_rot_mat)
+        delta_rot = np.array(delta_axis_angle[0]) * delta_axis_angle[1]  # (3,)
+        delta_pose = np.concatenate([delta_pos, delta_rot])  # (6,)
+
+        # Compute Jacobian
+        palm_jacobian = self.kinematic_model.compute_end_link_spatial_jacobian(current_arm_qpos)
+
+        # Solve IK for joint deltas
+        delta_qpos = compute_inverse_kinematics(delta_pose, palm_jacobian)[:self.arm_dof]
+
+        # Integrate new joint positions
+        new_arm_qpos = current_arm_qpos + delta_qpos
+
+        # Construct full joint position (13D)
+        gripper_qpos = [gripper_opening] * 6  # drive + 5 other gripper joints
+        new_qpos = np.concatenate([new_arm_qpos, gripper_qpos])
+
+        assert new_qpos.shape[0] == self.robot.dof, f"Expected {self.robot.dof}D qpos, got {new_qpos.shape}"
+
+        self.robot.set_drive_target(new_qpos)
+
+        for _ in range(self.frame_skip):
+            self.robot.set_qf(self.robot.compute_passive_force(
+                external=False, coriolis_and_centrifugal=False))
             self.scene.step()
+
         self.current_step += 1
+
+    # def arm_sim_step(self, action: np.ndarray):
+    #     """
+    #     Executes one simulation step using absolute EE pose + gripper position.
+    #     action: [x, y, z, roll, pitch, yaw, gripper]
+    #     """
+    #     # Unpack action
+    #     target_pos = action[:3]
+    #     print(f"[DEBUG] target_pos inside step: {target_pos}")
+    #     target_rpy = action[3:6]
+    #     gripper_opening = np.clip(action[6], 0.0, 0.08)
+
+    #     # Convert RPY to quaternion
+    #     target_quat = transforms3d.euler.euler2quat(*target_rpy)  # [w, x, y, z]
+
+    #     # Current state
+    #     current_qpos = self.robot.get_qpos()
+    #     current_arm_qpos = current_qpos[:self.arm_dof]
+    #     current_pose = self.ee_link.get_pose()  # sapien.Pose
+
+    #     # Create target pose
+    #     target_pose = sapien.Pose(p=target_pos, q=target_quat)
+
+    #     # Compute 6D delta pose (in world frame)
+    #     delta_pos = target_pose.p - current_pose.p  # (3,)
+    #     current_mat = current_pose.to_transformation_matrix()[:3, :3]
+    #     target_mat = target_pose.to_transformation_matrix()[:3, :3]
+    #     delta_rot_mat = target_mat @ current_mat.T
+    #     delta_axis_angle = transforms3d.axangles.mat2axangle(delta_rot_mat)
+    #     delta_rot = np.array(delta_axis_angle[0]) * delta_axis_angle[1]  # (3,)
+    #     delta_pose = np.concatenate([delta_pos, delta_rot])  # (6,)
+
+    #     # Compute Jacobian
+    #     palm_jacobian = self.kinematic_model.compute_end_link_spatial_jacobian(current_arm_qpos)
+    #     # print(f"palm_jacobian.shape {palm_jacobian.shape}") # (6, 7)
+
+    #     # Solve IK for joint deltas
+    #     delta_qpos = compute_inverse_kinematics(delta_pose, palm_jacobian)[:self.arm_dof]
+
+    #     # Integrate new joint positions
+    #     new_arm_qpos = current_arm_qpos + delta_qpos
+
+    #     # Final full qpos with gripper
+    #     #new_qpos = np.concatenate([new_arm_qpos, [gripper_opening, gripper_opening]])
+    #     # new_qpos = np.concatenate([
+    #     #     new_arm_qpos,
+    #     #     [gripper_opening, gripper_opening],
+    #     #     current_qpos[9:]  # retain the rest (e.g., drive, inner knuckles, etc.)
+    #     # ])
+    #     new_qpos = np.concatenate([
+    #         new_arm_qpos,
+    #         [gripper_opening, gripper_opening],
+    #         [gripper_opening, gripper_opening, gripper_opening, gripper_opening]
+    #     ])
+
+    #     # print(f"[DEBUG] Robot DOF: {self.robot.dof}")  # 13
+    #     # print(f"[DEBUG] self.arm_dof: {self.arm_dof}")  # 7
+    #     # print(f"[DEBUG] new_qpos.shape: {new_qpos.shape}")  # (9, )
+    #     # print(f"[DEBUG] robot.get_qpos(): {self.robot.get_qpos()}")
+
+    #     # Apply drive target
+    #     # print(f"new_qpos.shape: {new_qpos.shape}") # (13, )
+    #     self.robot.set_drive_target(new_qpos)
+
+    #     for _ in range(self.frame_skip):
+    #         self.robot.set_qf(self.robot.compute_passive_force(
+    #             external=False, coriolis_and_centrifugal=False))
+    #         self.scene.step()
+
+    #     self.current_step += 1
+
+    # def arm_sim_step(self, action: np.ndarray):
+    #     """
+    #     Executes one simulation step using absolute EE pose + gripper command.
+    #     action: [x, y, z, roll, pitch, yaw, gripper_opening]
+    #     """
+    #     # Parse action
+    #     ee_xyz = action[:3]
+    #     ee_rpy = action[3:6]
+    #     gripper_opening = np.clip(action[6], 0.0, 0.08)  # 0~8cm range
+
+    #     # Convert RPY to quaternion
+    #     ee_quat = transforms3d.euler.euler2quat(*ee_rpy)  # [w, x, y, z]
+
+    #     # Create target pose for end-effector
+    #     ee_pose = sapien.Pose(p=ee_xyz, q=ee_quat)
+
+    #     # Compute joint position using IK
+    #     qpos = self.robot.get_qpos().copy()
+    #     arm_qpos = self.kinematic_model.compute_inverse_kinematics(
+    #         link_index=self.ee_link.get_index(),
+    #         pose=ee_pose,
+    #         initial_qpos=qpos[:self.arm_dof]
+    #     )
+    #     # Optional: clip joint limits here if needed
+
+    #     # Compose full joint positions
+    #     full_qpos = np.concatenate([arm_qpos, [gripper_opening, gripper_opening]])
+
+    #     # Set drive targets (i.e. desired joint positions)
+    #     self.robot.set_drive_target(full_qpos)
+
+    #     # Step simulation
+    #     for _ in range(self.frame_skip):
+    #         self.robot.set_qf(self.robot.compute_passive_force(
+    #             external=False, coriolis_and_centrifugal=False))
+    #         self.scene.step()
+
+    #     self.current_step += 1
+
+    # def arm_sim_step(self, action: np.ndarray):
+    #     current_qpos = self.robot.get_qpos()
+    #     ee_link_last_pose = self.ee_link.get_pose()
+    #     action = np.clip(action, -1, 1)
+    #     target_root_velocity = recover_action(action[:6], self.velocity_limit[:6])
+    #     palm_jacobian = self.kinematic_model.compute_end_link_spatial_jacobian(current_qpos[:self.arm_dof])
+    #     arm_qvel = compute_inverse_kinematics(target_root_velocity, palm_jacobian)[:self.arm_dof]
+    #     arm_qvel = np.clip(arm_qvel, -np.pi / 1, np.pi / 1)
+    #     arm_qpos = arm_qvel * self.control_time_step + self.robot.get_qpos()[:self.arm_dof]
+    #     #hand_qpos = recover_action(action[6:], self.robot.get_qlimits()[self.arm_dof:])
+    #     hand_qpos = recover_action(action[7:], self.robot.get_qlimits()[self.arm_dof:])  # Control gripper joint only
+    #     target_qpos = np.concatenate([arm_qpos, hand_qpos])
+    #     target_qvel = np.zeros_like(target_qpos)
+    #     target_qvel[:self.arm_dof] = arm_qvel
+    #     # target_qvel[self.arm_dof:] = [1,-1]
+    #     self.robot.set_drive_target(target_qpos)
+
+    #     for i in range(self.frame_skip):
+    #         self.robot.set_qf(self.robot.compute_passive_force(external=False, coriolis_and_centrifugal=True))
+    #         self.scene.step()
+    #     self.current_step += 1
 
     #use qoos for action
     def trossen_sim_step(self, action: np.ndarray):
@@ -276,6 +443,8 @@ class BaseRLEnv(BaseSimulationEnv, gym.Env):
             self.cameras[cam_name].set_local_pose(original_pose * perturb_pose)
 
     def step(self, action: np.ndarray):
+        # print(f"[base step] {action}")
+        # print(f"[base step.shape] {action.shape}")
         self.rl_step(action)
         self.update_cached_state()
         self.update_imagination(reset_goal=False)
