@@ -61,6 +61,7 @@ class SapienSeriesImageRunner(BaseImageRunner):
             n_envs = n_train + n_test
         steps_per_render = 1
 
+        #dataset_dir = '/home/hz2999/gendp/data/hang_mug/'
         print(f"[sapien_series_image_runner] dataset_dir {dataset_dir}")
         env_cfg_path = os.path.join(dataset_dir, 'config.yaml')
         env_cfg = OmegaConf.load(env_cfg_path)
@@ -78,7 +79,7 @@ class SapienSeriesImageRunner(BaseImageRunner):
             if inst_name is not None and "CubePicking" not in env_cfg._target_:
             #if inst_name is not None:
                 env_cfg.manip_obj = inst_name
-            print("🔍 inst_name: ")
+            # print("🔍 inst_name: ")
             # print(inst_name)
             env : BaseRLEnv = hydra.utils.instantiate(env_cfg)
             add_default_scene_light(env.scene, env.renderer)
@@ -139,6 +140,7 @@ class SapienSeriesImageRunner(BaseImageRunner):
                     seed = train_start_idx
                     dataset_path = os.path.join(dataset_dir, f'episode_0.hdf5')
                 enable_render = i < n_train_vis
+                print(f"Loading HDF5: {dataset_path}")
                 with h5py.File(dataset_path, 'r') as f:
                     init_states = f['info']['init_poses'][()]
 
@@ -238,6 +240,14 @@ class SapienSeriesImageRunner(BaseImageRunner):
         all_video_paths = [None] * n_inits
         all_rewards = [None] * n_inits
 
+        # Load actions from HDF5 (once for all rollouts)
+        hdf5_path = "/home/hz2999/gendp/data/cube_picking_hdf5_Apr16/episode_0.hdf5"
+        #hdf5_path = "/home/hz2999/gendp/data/cube_picking_hdf5_Apr11/episode_0.hdf5"
+        #hdf5_path = "/home/hz2999/gendp/data/cube_picking_hdf5_Apr9/episode_0.hdf5"
+        #hdf5_path = "/home/hz2999/gendp/data/sapien_demo/episode_0.hdf5"
+        with h5py.File(hdf5_path, "r") as f:
+            cartesian_actions = f["cartesian_action"][:]  # shape: (T, 7)
+
         with tqdm.tqdm(total=n_envs, desc='Rollout envs', leave=True, position=0) as env_pbar:
             action_ls = list()
             for env_idx in range(n_envs):
@@ -261,43 +271,128 @@ class SapienSeriesImageRunner(BaseImageRunner):
                 env_action_ls = list()
                 step_count = 0
                 while not done:
-                    # create obs dict
-                    np_obs_dict = dict(obs)
-                    if self.past_action and (past_action is not None):
-                        # TODO: not tested
-                        np_obs_dict['past_action'] = past_action[
-                            :,-(self.n_obs_steps-1):].astype(np.float32)
+                    if step_count >= len(cartesian_actions):
+                        print(f"Reached end of cartesian_action sequence at step {step_count}")
+                        break
+
+                    # Extract action directly from HDF5
+                    raw_action = cartesian_actions[step_count]  # (7,)
+                    action = raw_action[None, None, :]  # shape: (1, 1, 7)
+
+                    # # create obs dict
+                    # np_obs_dict = dict(obs)
+                    # if self.past_action and (past_action is not None):
+                    #     # TODO: not tested
+                    #     np_obs_dict['past_action'] = past_action[
+                    #         :,-(self.n_obs_steps-1):].astype(np.float32)
                     
-                    # device transfer
-                    obs_dict = dict_apply(np_obs_dict, 
-                        lambda x: torch.from_numpy(x).to(
-                            device=device))
+                    # # device transfer
+                    # obs_dict = dict_apply(np_obs_dict, 
+                    #     lambda x: torch.from_numpy(x).to(
+                    #         device=device))
 
-                    # run policy
-                    with torch.no_grad():
-                        # filter out policy keys
-                        if self.policy_keys is not None:
-                            obs_dict = dict((k, obs_dict[k]) for k in self.policy_keys)
-                        action_dict = policy.predict_action(obs_dict)
+                    # # run policy
+                    # with torch.no_grad():
+                    #     # filter out policy keys
+                    #     if self.policy_keys is not None:
+                    #         obs_dict = dict((k, obs_dict[k]) for k in self.policy_keys)
+                    #     action_dict = policy.predict_action(obs_dict)
 
-                    # device_transfer
-                    np_action_dict = dict_apply(action_dict,
-                        lambda x: x.detach().to('cpu').numpy())
+                    # # device_transfer
+                    # np_action_dict = dict_apply(action_dict,
+                    #     lambda x: x.detach().to('cpu').numpy())
 
-                    action = np_action_dict['action']
+                    # action = np_action_dict['action']
+                    # np.set_printoptions(precision=2, suppress=True)
+                    # print(f'action.shape: {action.shape}')
+                    # print(action)
 
-                    # step env
-                    env_action = action
-                    if self.abs_action:
-                        n_envs, n_steps, action_dim = action.shape
-                        env_action = self.undo_transform_action(action.reshape(n_envs * n_steps, action_dim)) # (n_envs, n_steps, action_dim)
-                        env_action = env_action.reshape(n_envs, n_steps, env_action.shape[-1])
+                    # # Policy is delta -> Accumulate the actions
+                    # if step_count == 0:
+                    #     accumulated_action = action.copy()
+                    # else:
+                    #     accumulated_action += action  # accumulate deltas
+                    # print(f'accumulated_action.shape: {accumulated_action.shape}')
+                    # print(accumulated_action)
 
-                    env_action_ls.append(env_action[0])
-                    obs, reward, done, info = env.step(env_action[0])
+                    # if not np.all(np.isfinite(action)):
+                    #     print(action)
+                    #     action = np.random.randn(*action.shape)
+                    #     # raise RuntimeError("Nan or Inf action")
+
+                    # # Manually define actions
+                    # # Example: go down -0.001 per step, go left +0.001 on y
+                    # used_action = np.zeros((self.n_action_steps, 7))
+                    # for j in range(self.n_action_steps):
+                    #     global_step = step_count * self.n_action_steps + j
+                    #     used_action[j, 0] = 0.01 + global_step * 0.002   
+                    #     used_action[j, 1] = 0.0  
+                    #     used_action[j, 2] = 0.4 - global_step * 0.002   
+                    #     used_action[j, 3:6] = [3.14, 0, 2.0]            
+                    #     used_action[j, 6] = 0.09                                  
+                    # obs, reward, done, info = env.step(used_action)
+                    # action = used_action
+                    # print(f'used_action.shape: {used_action.shape}')
+                    # print(used_action)
+
+                    #print(action)
+                    # if env_idx == 0:
+                    #     print("🔍 First action sample (raw):", action[0, 0])
+                    #     print("📐 Mean action:", action.mean(), "Std:", action.std())
+                    #     print("📊 Action min/max:", action.min(), action.max())
+                    
+                    # # step env
+                    # env_action = action
+                    # if self.abs_action:
+                    #     print("[abs_action==True]")
+                    #     n_envs, n_steps, action_dim = action.shape
+                    #     env_action = self.undo_transform_action(action.reshape(n_envs * n_steps, action_dim)) # (n_envs, n_steps, action_dim)
+                    #     env_action = env_action.reshape(n_envs, n_steps, env_action.shape[-1])
+
+                    accumulated_action = action
+                    
+                    n_envs, n_steps, action_dim = accumulated_action.shape
+                    env_action = self.undo_transform_action(accumulated_action.reshape(n_envs * n_steps, action_dim))
+                    env_action = env_action.reshape(n_envs, n_steps, env_action.shape[-1])
+
+                    # # Policy is delta -> Accumulate the actions
+                    # if step_count == 0:
+                    #     accumulated_action = env_action[0].copy()
+                    # else:
+                    #     accumulated_action += env_action[0]  # accumulate deltas
+
+                    # used_action = accumulated_action
+
+                    # env_action_ls.append(used_action)
+                    # obs, reward, done, info = env.step(used_action)
+                    # print(f'used_action.shape: {used_action.shape}')
+                    # print(used_action)
+                    action = action.reshape(1, 7)
+                    print(f'action.shape: {action.shape}')
                     np.set_printoptions(precision=2, suppress=True)
-                    #print(f'env_action[0].shape: {env_action[0].shape}')
-                    print(env_action[0])
+                    print("[DEBUG] Actual action passed into step:", action)
+                    obs, reward, done, info = env.step(action)
+
+                    # print(f'env_action.shape: {env_action.shape}') # (1, 7)
+                    # for j in range(env_action[0].shape[0]):
+                    #     env_action_ls.append(env_action[0][j])
+                    #     np.set_printoptions(precision=2, suppress=True)
+                    #     print("[DEBUG] Actual action passed into step:", env_action[0][j])
+                    #     print("[DEBUG] Actual action shape passed into step:", env_action[0][j].shape)
+                    #     obs, reward, done, info = env.step(env_action[0][j])
+
+                    for j in range(env_action[0].shape[0]):
+                        pos = np.asarray(env_action[0][j][:3]).flatten()
+                        assert pos.shape == (3,), f"Invalid pos shape: {pos.shape}"
+
+                        builder = env.env.env.env.scene.create_actor_builder()
+                        builder.add_sphere_collision(radius=0.005)
+                        builder.add_sphere_visual(radius=0.005, color=[1.0, 0.0, 0.0])
+                        marker = builder.build_kinematic(name=f"marker_step_{step_count}_sub{j}")
+                        import sapien.core as sapien
+                        marker.set_pose(sapien.Pose(pos))
+
+                    # np.set_printoptions(precision=2, suppress=True)
 
                     for k, v in obs.items():
                         obs[k] = v[None]
@@ -307,10 +402,24 @@ class SapienSeriesImageRunner(BaseImageRunner):
                     # update pbar
                     pbar.update(action.shape[1])
                     step_count += 1
+                #print(f"[Rollout] Env {env_idx} took {step_count} steps, final reward: {np.max(env.reward)}")
                 env.close()
                 pbar.close()
                 env_pbar.update(1)
                 action_ls.append(np.concatenate(env_action_ls, axis=0))
+
+                # # Save rollout actions for later visualization
+                # action_array = np.stack(env_action_ls, axis=0)  
+                # save_dir = os.path.join("/home/hz2999/gendp/eval_results/cube_real/", "rollout_actions")
+                # os.makedirs(save_dir, exist_ok=True)
+
+                # action_array_2d = action_array.reshape(-1, action_array.shape[-1])
+                # save_path = os.path.join(save_dir, f"env_{env_idx}_actions.txt")
+                # np.savetxt(save_path, action_array_2d, fmt="%.6f")
+
+                # #save_path = os.path.join(save_dir, f"env_{env_idx}_actions.txt")
+                # #np.savetxt(save_path, action_array, fmt="%.6f")
+                # print(f"Saved action rollout to {save_path}")
 
                 # collect data for this round
                 all_video_paths[env_idx] = env.render()
@@ -373,7 +482,7 @@ class SapienSeriesImageRunner(BaseImageRunner):
         #plt.show()
         save_path = os.path.join(output_dir, f"trajectory_{i}.png")
         plt.savefig(save_path, dpi=300)
-        print(f"Saved trajectory plot to {save_path}")
+        print(f"✅ Saved trajectory plot to {save_path}")
         plt.close()
 
         return log_data
@@ -383,6 +492,14 @@ class SapienSeriesImageRunner(BaseImageRunner):
         if raw_shape[-1] == 20:
             # dual arm
             action = action.reshape(-1,2,10)
+
+        # d_rot = action.shape[-1] - 4
+        # pos = action[...,:3]
+        # rot = action[...,3:3+d_rot]
+        # gripper = action[...,[-1]]
+
+        # print("🔎 raw action shape:", action.shape)
+        # print("🧮 d_rot =", d_rot)
 
         pos = action[..., :3]  # x, y, z
         rot = action[..., 3:9]  # 6D rotation
